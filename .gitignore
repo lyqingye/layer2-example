@@ -3,3 +3,6 @@
 /circuits/create-account_js
 /circuits/create-account.r1cs
 /circuits/state.db
+/circuits/withdraw-test
+/circuits/withdraw_js
+/circuits/withdraw.r1cs

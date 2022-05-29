@@ -6,6 +6,8 @@ template CreateAccount(nLevels) {
         signal input balance;
 		signal input nonce;
 		signal input ethAddr;
+		signal input ax;
+		signal input ay;
 		signal input oldStateRoot;
 		signal input siblings[nLevels+1];
 		signal input isOld0;
@@ -27,6 +29,8 @@ template CreateAccount(nLevels) {
 		newLeafHash.nonce <== nonce;
 		newLeafHash.ethAddr <== ethAddr;
 		newLeafHash.idx <== newKey;
+		newLeafHash.ax <== ax;
+		newLeafHash.ay <== ay;
 
 		component processor = SMTProcessor(nLevels+1);
 		for (i = 0; i< nLevels + 1; i++) {
