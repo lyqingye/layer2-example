@@ -1,0 +1,4 @@
+/target
+/circuits/create-account-test
+/circuits/create-account_js
+/circuits/create-account.r1cs
