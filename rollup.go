@@ -224,9 +224,9 @@ func CreateAccountCircuitInputFromProof(acc *Account, proof *merkletree.CircomPr
 }
 
 type WithdrawCircuitInput struct {
-	Idx       string   `json:"idx"`
+	Idx     string `json:"idx"`
 	Balance string `json:"balance"`
-	Amount string `json:"amount"`
+	Amount  string `json:"amount"`
 	Nonce   string `json:"nonce"`
 	EthAddr string `json:"ethAddr"`
 	// bjj 公钥
@@ -265,7 +265,7 @@ func Withdraw(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (
 	// 更新账户状态，并且拿到proof
 	proof, err := state.UpdateAccount(acc)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	input.OldStateRoot = proof.OldRoot.BigInt().String()
 	var siblings []string
@@ -285,10 +285,10 @@ func Withdraw(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (
 	input.Amount = amount.String()
 
 	// Hash交易参数,然后签名交易
-	txBigInts := append([]*big.Int {proof.OldValue.BigInt()}, amount)
+	txBigInts := append([]*big.Int{proof.OldValue.BigInt()}, amount)
 	hash, err := poseidon.Hash(txBigInts)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	sign := pk.SignPoseidon(hash)
 	input.S = sign.S.String()
@@ -298,15 +298,17 @@ func Withdraw(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (
 	return &input, nil
 }
 
-func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*WithdrawCircuitInput, error) {
+type DepositCircuitInput WithdrawCircuitInput
+
+func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*DepositCircuitInput, error) {
 	acc, err := state.GetAccount(idx)
 	if err != nil {
 		return nil, err
 	}
 	if amount.Cmp(big.NewInt(0)) != 1 {
-		return nil,errors.New("invalid amount")
+		return nil, errors.New("invalid amount")
 	}
-	input := WithdrawCircuitInput{
+	input := DepositCircuitInput{
 		// 记录余额更新前的账号信息
 		Balance: acc.Balance.String(),
 		Nonce:   big.NewInt(int64(acc.Nonce)).String(),
@@ -321,7 +323,7 @@ func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*
 	// 更新账户状态，并且拿到proof
 	proof, err := state.UpdateAccount(acc)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	input.OldStateRoot = proof.OldRoot.BigInt().String()
 	var siblings []string
@@ -341,10 +343,10 @@ func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*
 	input.Amount = amount.String()
 
 	// Hash交易参数,然后签名交易
-	txBigInts := append([]*big.Int {proof.OldValue.BigInt()}, amount)
+	txBigInts := append([]*big.Int{proof.OldValue.BigInt()}, amount)
 	hash, err := poseidon.Hash(txBigInts)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	sign := pk.SignPoseidon(hash)
 	input.S = sign.S.String()
@@ -352,6 +354,118 @@ func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*
 	input.R8y = sign.R8.Y.String()
 
 	return &input, nil
+}
+type TransferCircuitInput struct {
+	SenderIdx     string `json:"senderIdx"`
+	SenderBalance string `json:"senderBalance"`
+	SenderNonce   string `json:"senderNonce"`
+	SenderEthAddr string `json:"senderEthAddr"`
+	// bjj 公钥
+	SenderAx           string   `json:"senderAx"`
+	SenderAy           string   `json:"senderAy"`
+	SenderOldStateRoot string   `json:"senderOldStateRoot"`
+	SenderSiblings     []string `json:"senderSiblings"`
+	SenderIsOld0       string   `json:"senderIsOld0"`
+
+	TransferAmount  string `json:"transferAmount"`
+
+	// 签名
+	SenderS   string `json:"senderS"`
+	SenderR8x string `json:"senderR8x"`
+	SenderR8y string `json:"senderR8y"`
+
+	ReceiverIdx     string `json:"receiverIdx"`
+	ReceiverBalance string `json:"receiverBalance"`
+	ReceiverNonce   string `json:"receiverNonce"`
+	ReceiverEthAddr string `json:"receiverEthAddr"`
+	// bjj 公钥
+	ReceiverAx           string   `json:"receiverAx"`
+	ReceiverAy           string   `json:"receiverAy"`
+	ReceiverSiblings     []string `json:"receiverSiblings"`
+	ReceiverIsOld0       string   `json:"receiverIsOld0"`
+}
+
+func Transfer(state *StateDB, senderIdx Idx, amount *big.Int, pk babyjub.PrivateKey, receiverIdx Idx) (*TransferCircuitInput,error) {
+	sender, err := state.GetAccount(senderIdx)
+	if err != nil {
+		return nil, err
+	}
+	receiver, err := state.GetAccount(receiverIdx)
+	if err != nil {
+		return nil, err
+	}
+	if amount.Cmp(sender.Balance) == 1 {
+		return nil, errors.New("insufficient balance")
+	}
+
+	input := TransferCircuitInput{
+		// 记录余额更新前的账号信息
+		SenderIdx: big.NewInt(int64(sender.Idx)).String(),
+		SenderBalance: sender.Balance.String(),
+		SenderNonce:   big.NewInt(int64(sender.Nonce)).String(),
+		SenderEthAddr: new(big.Int).SetBytes(sender.EthAddr.Bytes()).String(),
+		SenderAx:      sender.Ax.String(),
+		SenderAy:      sender.Ay.String(),
+
+		ReceiverIdx: big.NewInt(int64(receiver.Idx)).String(),
+		ReceiverBalance: receiver.Balance.String(),
+		ReceiverNonce:   big.NewInt(int64(receiver.Nonce)).String(),
+		ReceiverEthAddr: new(big.Int).SetBytes(receiver.EthAddr.Bytes()).String(),
+		ReceiverAx:      receiver.Ax.String(),
+		ReceiverAy:      receiver.Ay.String(),
+		TransferAmount: amount.String(),
+	}
+
+	sender.Balance = sender.Balance.Sub(sender.Balance, amount)
+	sender.Nonce = sender.Nonce + 1
+	receiver.Balance = receiver.Balance.Add(receiver.Balance,amount)
+
+	senderProof, err := state.UpdateAccount(sender)
+	if err != nil {
+		return nil, err
+	}
+
+	var senderSiblings []string
+	for _, s := range senderProof.Siblings {
+		senderSiblings = append(senderSiblings, s.BigInt().String())
+	}
+
+	input.SenderSiblings = senderSiblings
+	input.SenderOldStateRoot = senderProof.OldRoot.BigInt().String()
+
+	if senderProof.IsOld0 {
+		input.SenderIsOld0 = big.NewInt(1).String()
+	} else {
+		input.SenderIsOld0 = big.NewInt(0).String()
+	}
+
+	receiverProof, err := state.UpdateAccount(receiver)
+	if err != nil {
+		return nil, err
+	}
+
+	var receiverSiblings []string
+	for _, s := range receiverProof.Siblings {
+		receiverSiblings = append(receiverSiblings, s.BigInt().String())
+	}
+	input.ReceiverSiblings = receiverSiblings
+	if receiverProof.IsOld0 {
+		input.ReceiverIsOld0 = big.NewInt(1).String()
+	} else {
+		input.ReceiverIsOld0 = big.NewInt(0).String()
+	}
+
+	// Hash交易参数,然后签名交易
+	txBigInts := append([]*big.Int{senderProof.OldValue.BigInt()}, amount)
+	hash, err := poseidon.Hash(txBigInts)
+	if err != nil {
+		return nil, err
+	}
+	sign := pk.SignPoseidon(hash)
+	input.SenderS = sign.S.String()
+	input.SenderR8x = sign.R8.X.String()
+	input.SenderR8y = sign.R8.Y.String()
+	return &input,nil
 }
 
 func main() {
@@ -383,7 +497,7 @@ func main() {
 		panic(err)
 	}
 
-	depositInput, err := Deposit(state, acc.Idx, big.NewInt(1), prikey)
+	depositInput, err := Deposit(state, acc.Idx, big.NewInt(100), prikey)
 	if err != nil {
 		panic(err)
 	}
@@ -405,6 +519,21 @@ func main() {
 		panic(err)
 	}
 	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/withdraw-test/input.json", withdrawInputBytes, 0777)
+	if err != nil {
+		panic(err)
+	}
+
+	transferInput, err := Transfer(state, acc.Idx, big.NewInt(1), prikey, acc.Idx-1)
+	if err != nil {
+		panic(err)
+	}
+
+	transferInputBytes, err := json.Marshal(transferInput)
+	if err != nil {
+		panic(err)
+	}
+
+	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/transfer-test/input.json", transferInputBytes, 0777)
 	if err != nil {
 		panic(err)
 	}
