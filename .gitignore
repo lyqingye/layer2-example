@@ -6,3 +6,6 @@
 /circuits/withdraw-test
 /circuits/withdraw_js
 /circuits/withdraw.r1cs
+/circuits/deposit-test
+/circuits/deposit_js
+/circuits/deposit.r1cs

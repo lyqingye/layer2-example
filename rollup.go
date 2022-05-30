@@ -224,7 +224,9 @@ func CreateAccountCircuitInputFromProof(acc *Account, proof *merkletree.CircomPr
 }
 
 type WithdrawCircuitInput struct {
+	Idx       string   `json:"idx"`
 	Balance string `json:"balance"`
+	Amount string `json:"amount"`
 	Nonce   string `json:"nonce"`
 	EthAddr string `json:"ethAddr"`
 	// bjj 公钥
@@ -233,9 +235,6 @@ type WithdrawCircuitInput struct {
 	OldStateRoot string   `json:"oldStateRoot"`
 	Siblings     []string `json:"siblings"`
 	IsOld0       string   `json:"isOld0"`
-	OldKey       string   `json:"oldKey"`
-	OldValue     string   `json:"oldValue"`
-	NewKey       string   `json:"newKey"`
 
 	// 签名
 	S   string `json:"s"`
@@ -251,11 +250,6 @@ func Withdraw(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (
 	if amount.Cmp(acc.Balance) == 1 {
 		return nil, errors.New("insufficient balance")
 	}
-	accBigInts, err := acc.BigInts()
-	if err != nil {
-		return nil, err
-	}
-
 	input := WithdrawCircuitInput{
 		// 记录余额更新前的账号信息
 		Balance: acc.Balance.String(),
@@ -270,8 +264,10 @@ func Withdraw(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (
 	acc.Nonce = acc.Nonce + 1
 	// 更新账户状态，并且拿到proof
 	proof, err := state.UpdateAccount(acc)
-
-	input.OldStateRoot = proof.OldRoot.String()
+	if err != nil {
+		return nil,err
+	}
+	input.OldStateRoot = proof.OldRoot.BigInt().String()
 	var siblings []string
 	for _, s := range proof.Siblings {
 		siblings = append(siblings, s.BigInt().String())
@@ -285,13 +281,71 @@ func Withdraw(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (
 	} else {
 		input.IsOld0 = big.NewInt(0).String()
 	}
-	input.OldKey = proof.OldKey.String()
-	input.OldValue = proof.OldValue.String()
-	input.NewKey = proof.NewKey.String()
+	input.Idx = big.NewInt(int64(idx)).String()
+	input.Amount = amount.String()
 
 	// Hash交易参数,然后签名交易
-	txBigInts := append(accBigInts[:], amount)
+	txBigInts := append([]*big.Int {proof.OldValue.BigInt()}, amount)
 	hash, err := poseidon.Hash(txBigInts)
+	if err != nil {
+		return nil,err
+	}
+	sign := pk.SignPoseidon(hash)
+	input.S = sign.S.String()
+	input.R8x = sign.R8.X.String()
+	input.R8y = sign.R8.Y.String()
+
+	return &input, nil
+}
+
+func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*WithdrawCircuitInput, error) {
+	acc, err := state.GetAccount(idx)
+	if err != nil {
+		return nil, err
+	}
+	if amount.Cmp(big.NewInt(0)) != 1 {
+		return nil,errors.New("invalid amount")
+	}
+	input := WithdrawCircuitInput{
+		// 记录余额更新前的账号信息
+		Balance: acc.Balance.String(),
+		Nonce:   big.NewInt(int64(acc.Nonce)).String(),
+		EthAddr: new(big.Int).SetBytes(acc.EthAddr.Bytes()).String(),
+		Ax:      acc.Ax.String(),
+		Ay:      acc.Ay.String(),
+	}
+	// 更新余额度
+	acc.Balance = acc.Balance.Add(acc.Balance, amount)
+	// 更新nonce
+	acc.Nonce = acc.Nonce + 1
+	// 更新账户状态，并且拿到proof
+	proof, err := state.UpdateAccount(acc)
+	if err != nil {
+		return nil,err
+	}
+	input.OldStateRoot = proof.OldRoot.BigInt().String()
+	var siblings []string
+	for _, s := range proof.Siblings {
+		siblings = append(siblings, s.BigInt().String())
+	}
+	if len(proof.Siblings) != nLevels+1 {
+		panic("invalid siblings length")
+	}
+	input.Siblings = siblings
+	if proof.IsOld0 {
+		input.IsOld0 = big.NewInt(1).String()
+	} else {
+		input.IsOld0 = big.NewInt(0).String()
+	}
+	input.Idx = big.NewInt(int64(idx)).String()
+	input.Amount = amount.String()
+
+	// Hash交易参数,然后签名交易
+	txBigInts := append([]*big.Int {proof.OldValue.BigInt()}, amount)
+	hash, err := poseidon.Hash(txBigInts)
+	if err != nil {
+		return nil,err
+	}
 	sign := pk.SignPoseidon(hash)
 	input.S = sign.S.String()
 	input.R8x = sign.R8.X.String()
@@ -324,7 +378,33 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile("/home/lyqingye/GolandProjects/circom-example/circuits/create-account-test/input.json", inputBytes, 0777)
+	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/create-account-test/input.json", inputBytes, 0777)
+	if err != nil {
+		panic(err)
+	}
+
+	depositInput, err := Deposit(state, acc.Idx, big.NewInt(1), prikey)
+	if err != nil {
+		panic(err)
+	}
+	depositInputBytes, err := json.Marshal(depositInput)
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/deposit-test/input.json", depositInputBytes, 0777)
+	if err != nil {
+		panic(err)
+	}
+
+	withdrawInput, err := Withdraw(state, acc.Idx, big.NewInt(1), prikey)
+	if err != nil {
+		panic(err)
+	}
+	withdrawInputBytes, err := json.Marshal(withdrawInput)
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/withdraw-test/input.json", withdrawInputBytes, 0777)
 	if err != nil {
 		panic(err)
 	}

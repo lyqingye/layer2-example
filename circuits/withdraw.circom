@@ -1,46 +1,37 @@
 pragma circom 2.0.0;
 include "circomlib/circuits/smt/smtprocessor.circom";
 include "hash-state.circom";
+include "circomlib/circuits/eddsaposeidon.circom";
 
 template Withdraw(nLevels) {
+    // 账号基本信息
     signal input idx;
     signal input balance;
     signal input amount;
     signal input nonce;
     signal input ethAddr;
+
+    // bjj 公钥
     signal input ax;
     signal input ay;
+
+    // 默克尔证明
     signal input oldStateRoot;
     signal input siblings[nLevels+1];
     signal input isOld0;
 
+    // 签名
+    signal input s;
+    signal input r8x;
+    signal input r8y;
+
+    // 电路的Output
     signal output newRoot;
     signal output oldRoot;
+    signal output outTxHash;
 
     var i;
     signal remainder;
-
-    component is_zero = IsZero();
-    is_zero.in <== balance;
-    is_zero.out === 0;
-
-    // TODO 验证签名
-
-    // 检查余额是否为 0
-    component check_balance = IsZero();
-    check_balance.in <== balance;
-    check_balance.out === 0;
-
-    // 检查要转账的金额是否为 0
-    component check_amount = IsZero();
-    check_amount.in <== amount;
-    check_amount.out === 0;
-
-    // 计算余额，并且进行溢出检查
-    remainder <== balance - amount;
-    component remainderBits = Num2Bits(256);
-    remainderBits.in <== remainder;
-    remainderBits.out[255] === 0;
 
     // 计算旧状态
     component oldState = HashState();
@@ -51,6 +42,44 @@ template Withdraw(nLevels) {
     oldState.ethAddr <== ethAddr;
     oldState.ax <== ax;
     oldState.ay <== ay;
+
+    // 计算交易Hash
+    component txHash = Poseidon(2);
+    txHash.inputs[0] <== oldState.out;
+    txHash.inputs[1] <== amount;
+
+    txHash.out ==> outTxHash;
+
+    // 验签
+    component signVerify = EdDSAPoseidonVerifier();
+    signVerify.enabled <== 1;
+    signVerify.Ax <== ax;
+    signVerify.Ay <== ay;
+    signVerify.S <== s;
+    signVerify.R8x <== r8x;
+    signVerify.R8y <== r8y;
+    signVerify.M <== txHash.out;
+
+    // 检查余额是否为 0
+    component check_balance = IsZero();
+    check_balance.in <== balance;
+    check_balance.out === 0;
+
+    // 检查要提现的金额是否为 0
+    component check_amount = IsZero();
+    check_amount.in <== amount;
+    check_amount.out === 0;
+
+    // 检查提现金额是否为正数
+    component checkAmountBits = Num2Bits(256);
+    checkAmountBits.in <== amount;
+    checkAmountBits.out[255] === 0;
+
+    // 计算余额，并且进行溢出检查
+    remainder <== balance - amount;
+    component remainderBits = Num2Bits(256);
+    remainderBits.in <== remainder;
+    remainderBits.out[255] === 0;
 
     // 计算新状态
     component newState = HashState();
