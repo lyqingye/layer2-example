@@ -9,3 +9,6 @@
 /circuits/deposit-test
 /circuits/deposit_js
 /circuits/deposit.r1cs
+/circuits/transfer-test
+/circuits/transfer_js
+/circuits/transfer.r1cs
