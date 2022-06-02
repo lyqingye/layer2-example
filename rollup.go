@@ -12,6 +12,7 @@ import (
 	"github.com/iden3/go-merkletree/db/pebble"
 	"io/ioutil"
 	"math/big"
+	"os"
 )
 
 var (
@@ -355,6 +356,7 @@ func Deposit(state *StateDB, idx Idx, amount *big.Int, pk babyjub.PrivateKey) (*
 
 	return &input, nil
 }
+
 type TransferCircuitInput struct {
 	SenderIdx     string `json:"senderIdx"`
 	SenderBalance string `json:"senderBalance"`
@@ -367,7 +369,7 @@ type TransferCircuitInput struct {
 	SenderSiblings     []string `json:"senderSiblings"`
 	SenderIsOld0       string   `json:"senderIsOld0"`
 
-	TransferAmount  string `json:"transferAmount"`
+	TransferAmount string `json:"transferAmount"`
 
 	// 签名
 	SenderS   string `json:"senderS"`
@@ -379,13 +381,13 @@ type TransferCircuitInput struct {
 	ReceiverNonce   string `json:"receiverNonce"`
 	ReceiverEthAddr string `json:"receiverEthAddr"`
 	// bjj 公钥
-	ReceiverAx           string   `json:"receiverAx"`
-	ReceiverAy           string   `json:"receiverAy"`
-	ReceiverSiblings     []string `json:"receiverSiblings"`
-	ReceiverIsOld0       string   `json:"receiverIsOld0"`
+	ReceiverAx       string   `json:"receiverAx"`
+	ReceiverAy       string   `json:"receiverAy"`
+	ReceiverSiblings []string `json:"receiverSiblings"`
+	ReceiverIsOld0   string   `json:"receiverIsOld0"`
 }
 
-func Transfer(state *StateDB, senderIdx Idx, amount *big.Int, pk babyjub.PrivateKey, receiverIdx Idx) (*TransferCircuitInput,error) {
+func Transfer(state *StateDB, senderIdx Idx, amount *big.Int, pk babyjub.PrivateKey, receiverIdx Idx) (*TransferCircuitInput, error) {
 	sender, err := state.GetAccount(senderIdx)
 	if err != nil {
 		return nil, err
@@ -400,25 +402,25 @@ func Transfer(state *StateDB, senderIdx Idx, amount *big.Int, pk babyjub.Private
 
 	input := TransferCircuitInput{
 		// 记录余额更新前的账号信息
-		SenderIdx: big.NewInt(int64(sender.Idx)).String(),
+		SenderIdx:     big.NewInt(int64(sender.Idx)).String(),
 		SenderBalance: sender.Balance.String(),
 		SenderNonce:   big.NewInt(int64(sender.Nonce)).String(),
 		SenderEthAddr: new(big.Int).SetBytes(sender.EthAddr.Bytes()).String(),
 		SenderAx:      sender.Ax.String(),
 		SenderAy:      sender.Ay.String(),
 
-		ReceiverIdx: big.NewInt(int64(receiver.Idx)).String(),
+		ReceiverIdx:     big.NewInt(int64(receiver.Idx)).String(),
 		ReceiverBalance: receiver.Balance.String(),
 		ReceiverNonce:   big.NewInt(int64(receiver.Nonce)).String(),
 		ReceiverEthAddr: new(big.Int).SetBytes(receiver.EthAddr.Bytes()).String(),
 		ReceiverAx:      receiver.Ax.String(),
 		ReceiverAy:      receiver.Ay.String(),
-		TransferAmount: amount.String(),
+		TransferAmount:  amount.String(),
 	}
 
 	sender.Balance = sender.Balance.Sub(sender.Balance, amount)
 	sender.Nonce = sender.Nonce + 1
-	receiver.Balance = receiver.Balance.Add(receiver.Balance,amount)
+	receiver.Balance = receiver.Balance.Add(receiver.Balance, amount)
 
 	senderProof, err := state.UpdateAccount(sender)
 	if err != nil {
@@ -465,7 +467,7 @@ func Transfer(state *StateDB, senderIdx Idx, amount *big.Int, pk babyjub.Private
 	input.SenderS = sign.S.String()
 	input.SenderR8x = sign.R8.X.String()
 	input.SenderR8y = sign.R8.Y.String()
-	return &input,nil
+	return &input, nil
 }
 
 func main() {
@@ -492,7 +494,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/create-account-test/input.json", inputBytes, 0777)
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	err = ioutil.WriteFile(pwd+"/create-account-test/input.json", inputBytes, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -505,7 +511,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/deposit-test/input.json", depositInputBytes, 0777)
+	err = ioutil.WriteFile(pwd+"/deposit-test/input.json", depositInputBytes, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -518,7 +524,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/withdraw-test/input.json", withdrawInputBytes, 0777)
+	err = ioutil.WriteFile(pwd+"/withdraw-test/input.json", withdrawInputBytes, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -533,7 +539,7 @@ func main() {
 		panic(err)
 	}
 
-	err = ioutil.WriteFile("/Users/pundix008/Documents/layer2-example/circuits/transfer-test/input.json", transferInputBytes, 0777)
+	err = ioutil.WriteFile(pwd+"/transfer-test/input.json", transferInputBytes, 0777)
 	if err != nil {
 		panic(err)
 	}
